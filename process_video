@@ -1,0 +1,247 @@
+
+
+
+# import os
+# import cv2
+# from concurrent.futures import ThreadPoolExecutor
+# from tqdm import tqdm
+
+# def extract_frames(video_path, output_root_folder):
+#     # Open the video file
+#     cap = cv2.VideoCapture(video_path)
+
+#     # Get video properties
+#     fps = cap.get(cv2.CAP_PROP_FPS)
+#     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+#     # Create output folder if it doesn't exist
+#     os.makedirs(output_root_folder, exist_ok=True)
+
+#     # Create a folder for each video file
+#     video_name = os.path.splitext(os.path.basename(video_path))[0]
+#     output_folder = os.path.join(output_root_folder, video_name)
+#     os.makedirs(output_folder, exist_ok=True)
+
+#     # Iterate through frames
+#     for frame_number in range(total_frames):
+#         ret, frame = cap.read()
+
+#         # Break the loop if no more frames are available
+#         if not ret:
+#             break
+
+#         # Save the frame as a PNG image
+#         image_name = f"images{frame_number + 1:04d}.png"
+#         image_path = os.path.join(output_folder, image_name)
+#         cv2.imwrite(image_path, frame)
+
+#     # Release the video capture object
+#     cap.release()
+
+
+
+# if __name__ == "__main__":
+#     # Replace 'uid_file' with the path to your text file containing UIDs
+#     uid_file = '/media/anil/New Volume1/sumedha/GFSLT-VLP/ISL_Data/train.txt'
+
+#     # Read UIDs from the text file
+#     with open(uid_file, 'r') as file:
+#         uids = [line.strip() for line in file]
+
+#     # Replace 'input_folder' with the path to your folder containing video files
+#     input_folder = '/media/anil/New Volume1/sumedha/slt/ISLTranslate/ISL-video_dataset'
+
+#     # Replace 'output_root_folder' with the path to the folder where you want to save frames
+#     output_root_folder = '/media/anil/New Volume1/sumedha/GFSLT-VLP/ISL_Data/train'
+
+#     # Create a ThreadPoolExecutor with, for example, 4 concurrent threads
+#     with ThreadPoolExecutor(max_workers=4) as executor:
+#         # Define a function to be executed concurrently
+#         def process_video(uid):
+#             video_file = f"{uid}.mp4"
+#             video_path = os.path.join(input_folder, video_file)
+
+#             if os.path.exists(video_path):
+#                 extract_frames(video_path, output_root_folder)
+#                 print(f"Frames extracted from {video_file} and saved to {output_root_folder}/{video_file}/")
+#             else:
+#                 print(f"Video file {video_file} not found.")
+
+#         # Use tqdm to create a progress bar
+#         progress_bar = tqdm(total=len(uids), desc="Processing Videos")
+
+#         # Submit tasks to the ThreadPoolExecutor for each UID
+#         futures = []
+#         for uid in uids:
+#             future = executor.submit(process_video, uid)
+#             future.add_done_callback(lambda p: progress_bar.update())
+#             futures.append(future)
+
+#         # Wait for all tasks to complete
+#         for future in futures:
+#             future.result()
+
+#         # Close the progress bar
+#         progress_bar.close()
+
+# import os
+# import pandas as pd
+# import concurrent.futures
+# import gzip
+# import pickle
+
+
+# # Path to the .txt file containing uids
+# uids_txt_path = "/media/anil/New Volume1/sumedha/GFSLT-VLP/ISL_Data/dev.txt"
+
+
+# # Path to the CSV file with columns "uid" and "text"
+# csv_file_path = "/media/anil/New Volume1/sumedha/GFSLT-VLP/ISL_Data/ISLTranslate.csv"
+
+
+# # Path to the folder with subfolders named after uids
+# imgs_folder_path = "/media/anil/New Volume1/sumedha/GFSLT-VLP/ISL_Data/dev"
+
+
+# # Read uids from the .txt file
+# with open(uids_txt_path, "r") as f:
+#     uids = [line.strip() for line in f]
+
+
+# # Read data from the CSV file
+# data_df = pd.read_csv(csv_file_path)
+
+# # Initialize the dictionary
+# result_dict = {}
+
+# # Iterate through each uid
+# for uid in uids:
+#     # Relative path to the subfolder (dev/{uid})
+#     subfolder_path = os.path.join("dev", uid)
+#     video_path = os.path.join(imgs_folder_path, uid)
+
+#     # List of .png files in the subfolder
+#     imgs_path = [
+#         os.path.join(subfolder_path, f)
+#         for f in os.listdir(video_path)
+#         if f.endswith(".png")
+#     ]
+
+#     # Extract text from the CSV file corresponding to the uid
+#     text = data_df[data_df["uid"] == uid]["text"].values[0]
+
+#     # Create the dictionary entry with key as dev/{uid}
+#     result_dict[os.path.join("dev", uid)] = {
+#         "name": os.path.join("dev", uid),
+#         "gloss": " ",
+#         "text": text,
+#         "length": len(imgs_path),
+#         "imgs_path": imgs_path,
+#     }
+
+# # Print or use the resulting dictionary
+# print(result_dict)
+
+
+# # Specify the file path where you want to store the result_dict
+# file_path = "/media/anil/New Volume1/sumedha/GFSLT-VLP/data/ISLTranslate/labels.dev"
+
+# # Store result_dict in the file
+# with gzip.open(file_path, "wb") as f:
+#     pickle.dump(result_dict, f)
+
+
+# # Function to load the dataset file
+# def load_dataset_file(file_path):
+#     with gzip.open(file_path, "rb") as f:
+#         loaded_object = pickle.load(f)
+#         return loaded_object
+
+
+
+
+# Function to process a single uid
+# def process_uid(uid):
+#     subfolder_path = os.path.join("dev", uid)
+#     video_path = os.path.join(imgs_folder_path, uid)
+   
+#     imgs_path = [
+#         os.path.join(subfolder_path, f)
+#         for f in os.listdir(video_path)
+#         if f.endswith(".png")
+#     ]
+
+
+#     text = data_df[data_df["uid"] == uid]["text"].values[0]
+
+
+#     return os.path.join("dev", uid), {
+#         "name": os.path.join("dev", uid),
+#         "gloss": " ",
+#         "text": text,
+#         "length": len(imgs_path),
+#         "imgs_path": imgs_path,
+#     }
+
+
+# # Using multithreading to process uids
+# result_dict = {}
+# with concurrent.futures.ThreadPoolExecutor() as executor:
+#     # Process each uid concurrently
+#     future_to_uid = {executor.submit(process_uid, uid): uid for uid in uids}
+#     for future in concurrent.futures.as_completed(future_to_uid):
+#         uid = future_to_uid[future]
+#         try:
+#             result_dict[uid] = future.result()
+#         except Exception as e:
+#             print(f"Error processing uid {uid}: {e}")
+
+
+
+
+
+
+# # Print or use the resulting dictionary
+# print(result_dict)
+
+
+
+
+# Specify the file path where you want to store the result_dict
+# file_path = "/media/anil/New Volume1/sumedha/GFSLT-VLP/data/ISLTranslate/labels.dev/labels.dev"
+
+
+# # Store result_dict in the file
+# with gzip.open(file_path, "wb") as f:
+#     pickle.dump(result_dict, f)
+
+# # Function to load the dataset file
+# def load_dataset_file(file_path):
+#     with gzip.open(file_path, "rb") as f:
+#         loaded_object = pickle.load(f)
+#         return loaded_object
+
+
+
+
+# # Load the dictionary back
+# loaded_object = load_dataset_file(file_path)
+
+
+# # Print or use the loaded dictionary
+# print(loaded_object)
+import pickle
+import numpy as np
+
+# Replace 'path_to_file.pkl' with the actual file path of your .pkl file
+file_path = '/media/anil/New Volume1/sumedha/GFSLT-VLP/sample_features.pkl'
+
+# Open the file in binary read mode
+with open(file_path, 'rb') as file:
+    # Load (deserialize) the object from the file
+    my_object = pickle.load(file)
+
+# Print the object
+obj = np.array(my_object["keypoints"])
+print(obj.shape)
+
