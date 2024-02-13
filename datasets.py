@@ -22,42 +22,61 @@ from loguru import logger
 # global definition
 from definition import *
 
-class Normaliztion(object):
-    """
-        same as mxnet, normalize into [-1, 1]
-        image = (image - 127.5)/128
-    """
+# class Normaliztion(object):
+#     """
+#         same as mxnet, normalize into [-1, 1]
+#         image = (image - 127.5)/128
+#     """
 
-    def __call__(self, Image):
-        if isinstance(Image, PIL.Image.Image):
-            Image = np.asarray(Image, dtype=np.uint8)
-        new_video_x = (Image - 127.5) / 128
-        return new_video_x
+#     def __call__(self, Image):
+#         if isinstance(Image, PIL.Image.Image):
+#             Image = np.asarray(Image, dtype=np.uint8)
+#         new_video_x = (Image - 127.5) / 128
+#         return new_video_x
 
-class SomeOf(object):
-    """
-    Selects one augmentation from a list.
-    Args:
-        transforms (list of "Augmentor" objects): The list of augmentations to compose.
-    """
+# class SomeOf(object):
+#     """
+#     Selects one augmentation from a list.
+#     Args:
+#         transforms (list of "Augmentor" objects): The list of augmentations to compose.
+#     """
 
-    def __init__(self, transforms1, transforms2):
-        self.transforms1 = transforms1
-        self.transforms2 = transforms2
+#     def __init__(self, transforms1, transforms2):
+#         self.transforms1 = transforms1
+#         self.transforms2 = transforms2
 
-    def __call__(self, clip):
-        select = random.choice([0, 1, 2])
-        if select == 0:
-            return clip
-        elif select == 1:
-            if random.random() > 0.5:
-                return self.transforms1(clip)
+#     def __call__(self, clip):
+#         select = random.choice([0, 1, 2])
+#         if select == 0:
+#             return clip
+#         elif select == 1:
+#             if random.random() > 0.5:
+#                 return self.transforms1(clip)
+#             else:
+#                 return self.transforms2(clip)
+#         else:
+#             clip = self.transforms1(clip)
+#             clip = self.transforms2(clip)
+#             return clip
+import h5py
+
+def get_frame_features(hdf5_file, video_name, frame_index):
+    with h5py.File(hdf5_file, 'r') as hf:
+        if video_name in hf:
+            video_features = hf[video_name][:]
+            if frame_index < len(video_features):
+                return video_features[frame_index]
             else:
-                return self.transforms2(clip)
+                print("Frame index out of range.")
         else:
-            clip = self.transforms1(clip)
-            clip = self.transforms2(clip)
-            return clip
+            print(f"No features found for video: {video_name}")
+    return None
+
+# Example usage
+# hdf5_file = 'path_to_save_features.hdf5'
+# video_name = 'example_video'
+# frame_index = 10  # Index of the frame
+# frame_features = get_frame_features(hdf5_file, video_name, frame_index)
 
 class S2T_Dataset(Dataset.Dataset):
     def __init__(self,path,tokenizer,config,args,phase, training_refurbish=False):
@@ -105,42 +124,64 @@ class S2T_Dataset(Dataset.Dataset):
         
         name_sample = sample['name']
 
-        img_sample = self.load_imgs([self.img_path + x for x in sample['imgs_path']])
+        # img_sample = self.load_imgs([self.img_path + x for x in sample['imgs_path']])
+        img_sample = self.load_imgs(name_sample)
+
         
         return name_sample,img_sample,tgt_sample
     
-    def load_imgs(self, paths):
+    def load_imgs(self, video_name):
 
-        data_transform = transforms.Compose([
-                                    transforms.ToTensor(),
-                                    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]), 
-                                    ])
-        if len(paths) > self.max_length:
-            tmp = sorted(random.sample(range(len(paths)), k=self.max_length))
-            new_paths = []
-            for i in tmp:
-                new_paths.append(paths[i])
-            paths = new_paths
+        # data_transform = transforms.Compose([
+        #                             transforms.ToTensor(),
+        #                             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]), 
+        #                             ])
+
+        string = video_name
+        parts = string.split('/')
+        part1 = parts[0]  # 'dev'
+        video_name = parts[1]  # 'zoBP39jyRMs--203'
+
+        hdf5_file = None
+        if part1 == 'train':
+            hdf5_file = '/media/anil/New Volume1/sumedha/GFSLT-VLP/ISL_Data_features2/train.hdf5'
+        elif part1 == 'dev':
+            hdf5_file = '/media/anil/New Volume1/sumedha/GFSLT-VLP/ISL_Data_features2/dev.hdf5'
+        elif part1 == 'test':
+            hdf5_file = '/media/anil/New Volume1/sumedha/GFSLT-VLP/ISL_Data_features2/test.hdf5'
+        with h5py.File(hdf5_file, 'r') as hdf:
+        # Access the dataset for the video
+            if video_name in hdf:
+                video_features = hdf[video_name][:]
+                video_features = torch.tensor(video_features)
+                
+        video_len=video_features.shape[0]
+        if video_len > self.max_length:
+            # Randomly sample indices up to self.max_length
+            selected_indices = sorted(random.sample(range(video_len), k=self.max_length))
+
+            # Create a new tensor of features based on the selected indices
+            new_video_features = video_features[selected_indices]
+            video_features = new_video_features
+
+
     
-        imgs = torch.zeros(len(paths),3, self.args.input_size,self.args.input_size)
-        crop_rect, resize = utils.data_augmentation(resize=(self.args.resize, self.args.resize), crop_size=self.args.input_size, is_train=(self.phase=='train'))
+        # imgs = torch.zeros(len(paths),3, self.args.input_size,self.args.input_size)
+        # crop_rect, resize = utils.data_augmentation(resize=(self.args.resize, self.args.resize), crop_size=self.args.input_size, is_train=(self.phase=='train'))
 
-        batch_image = []
-        for i,img_path in enumerate(paths):
-            img = cv2.imread(img_path)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(img)
-            batch_image.append(img)
+        # batch_image = []
+        # for i,frame_features in enumerate(video_features):
+            
+        #     batch_image.append(frame_features)
 
-        if self.phase == 'train':
-            batch_image = self.seq(batch_image)
+        # # if self.phase == 'train':
+        # #     batch_image = self.seq(batch_image)
 
-        for i, img in enumerate(batch_image):
-            img = img.resize(resize)
-            img = data_transform(img).unsqueeze(0)
-            imgs[i,:,:,:] = img[:,:,crop_rect[1]:crop_rect[3],crop_rect[0]:crop_rect[2]]
+        # for i, img in enumerate(batch_image):
+            
+        #     imgs[i,:,:,:] = img[:,:,crop_rect[1]:crop_rect[3],crop_rect[0]:crop_rect[2]]
         
-        return imgs
+        return video_features
 
     def collate_fn(self,batch):
         
@@ -159,22 +200,46 @@ class S2T_Dataset(Dataset.Dataset):
         left_pad = 8
         right_pad = int(np.ceil(max_len / 4.0)) * 4 - max_len + 8
         max_len = max_len + left_pad + right_pad
-        padded_video = [torch.cat(
-            (
-                vid[0][None].expand(left_pad, -1, -1, -1),
-                vid,
-                vid[-1][None].expand(max_len - len(vid) - left_pad, -1, -1, -1),
-            )
-            , dim=0)
-            for vid in img_tmp]
         
-        img_tmp = [padded_video[i][0:video_length[i],:,:,:] for i in range(len(padded_video))]
+        padded_videos = [
+            torch.cat(
+                (
+                    vid[0][None].expand(left_pad, -1),  # Expand along the first dimension only
+                    vid,
+                    vid[-1][None].expand(max_len - len(vid) - left_pad, -1),
+                ),
+                dim=0
+            )
+            for vid in img_tmp
+        ]
+
+        # Slice the padded videos to match the specified lengths
+        img_tmp = [padded_video[:video_length[i], :] for i, padded_video in enumerate(padded_videos)]
+
+        # padded_video = [torch.cat(
+        #     (
+        #         vid[0][None].expand(left_pad, -1, -1, -1),
+        #         vid,
+        #         vid[-1][None].expand(max_len - len(vid) - left_pad, -1, -1, -1),
+        #     )
+        #     , dim=0)
+        #     for vid in img_tmp]
+        
+        # img_tmp = [padded_video[i][0:video_length[i],:,:,:] for i in range(len(padded_video))]
+        
         
         for i in range(len(img_tmp)):
             src_length_batch.append(len(img_tmp[i]))
         src_length_batch = torch.tensor(src_length_batch)
         
         img_batch = torch.cat(img_tmp,0)
+        x_batch = []
+        start = 0
+        for length in src_length_batch:
+            end = start + length
+            x_batch.append(img_batch[start:end])
+            start = end
+        x = pad_sequence(x_batch,padding_value=PAD_IDX,batch_first=True)
 
         new_src_lengths = (((src_length_batch-5+1) / 2)-5+1)/2
         new_src_lengths = new_src_lengths.long()
@@ -184,15 +249,22 @@ class S2T_Dataset(Dataset.Dataset):
             mask_gen.append(tmp)
         mask_gen = pad_sequence(mask_gen, padding_value=PAD_IDX,batch_first=True)
         img_padding_mask = (mask_gen != PAD_IDX).long()
+
         with self.tokenizer.as_target_tokenizer():
             tgt_input = self.tokenizer(tgt_batch, return_tensors="pt",padding = True,  truncation=True)
 
+        # print("Shapes of variables:")
+        # print("img_batch:", img_batch.shape)
+        # print("img_padding_mask:", img_padding_mask.shape)
+        # print("src_length_batch:", src_length_batch.shape)
+        # print("new_src_lengths:", new_src_lengths.shape)
         src_input = {}
-        src_input['input_ids'] = img_batch
+        src_input['input_ids'] = x
         src_input['attention_mask'] = img_padding_mask
 
         src_input['src_length_batch'] = src_length_batch
         src_input['new_src_length_batch'] = new_src_lengths
+        
         
         if self.training_refurbish:
             masked_tgt = utils.NoiseInjecting(tgt_batch, self.args.noise_rate, noise_type=self.args.noise_type, random_shuffle=self.args.random_shuffle, is_train=(self.phase=='train'))
@@ -203,9 +275,6 @@ class S2T_Dataset(Dataset.Dataset):
 
     def __str__(self):
         return f'#total {self.phase} set: {len(self.list)}.'
-
-
-
 
 
 
